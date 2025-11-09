@@ -1,0 +1,81 @@
+# Résumé Expert TP3 : Disques et Systèmes de Fichiers
+
+Ce résumé couvre les manipulations de disques, le clonage, la copie de systèmes et l'interopérabilité des systèmes de fichiers, en se concentrant sur les points essentiels pour votre QCM.
+
+---
+
+## 🎯 1. Analyse Initiale et Santé des Disques
+
+Avant toute manipulation, l'analyse de l'existant est cruciale.
+
+* **Commandes d'identification :**
+    * [cite_start]`lsblk` : Liste les périphériques "bloc" (disques et partitions) et leurs points de montage[cite: 19].
+    * [cite_start]`fdisk -l` : Affiche les tables de partitions des disques, y compris le type de partitionnement (MBR ou GPT)[cite: 21, 24].
+    * [cite_start]`blkid` : Affiche les identifiants uniques (UUID) et les types de systèmes de fichiers (SGF) de chaque partition[cite: 22].
+
+* **UUID (Universally Unique Identifier) :**
+    * [cite_start]C'est un identifiant unique pour un **système de fichiers** (ou une partition)[cite: 23].
+    * [cite_start]Le fichier `/etc/fstab` utilise l'UUID pour monter la partition racine (`/`)[cite: 26]. C'est plus fiable que d'utiliser `/dev/sda2`, car ce nom peut changer.
+    * **Piège :** Un SGF (ex: `ext4`) a un UUID. Une partition (ex: `swap`) peut aussi avoir un UUID. [cite_start]C'est pourquoi `blkid` peut afficher plusieurs UUID pour un même disque[cite: 25].
+
+* **Santé S.M.A.R.T. :**
+    * [cite_start]**Outil :** `smartctl` (du paquet `smartmontools`)[cite: 29].
+    * [cite_start]**Rôle :** Permet de lire les indicateurs de santé (S.M.A.R.T.) d'un disque dur[cite: 30].
+    * [cite_start]**Indicateur Clé :** L'attribut `Reallocated_Sector_Ct` (ID 5) [cite: 41] est critique. S'il est supérieur à 0, cela signifie que le disque a commencé à marquer des secteurs comme défaillants et à les remplacer. C'est un signe majeur de panne imminente.
+
+---
+
+## 🛠️ 2. Méthode 1 : Remplacement par Clonage (`dd`)
+
+[cite_start]**Objectif :** Remplacer un disque système par un nouveau, plus grand[cite: 73, 76].
+
+**Processus :**
+1.  [cite_start]**Mode "Live" :** Démarrer depuis un Live-CD (ou une clé USB)[cite: 52]. [cite_start]On ne peut pas cloner un système de fichiers *en cours d'utilisation*[cite: 50].
+2.  [cite_start]**Clonage :** Utiliser `dd` pour une copie "bloc à bloc" (octet par octet) du disque initial (`DiskInitial`) vers le nouveau (`DiskFinal`)[cite: 82].
+3.  **Problème 1 - Espace Perdu :** `dd` copie la taille *exacte* de la partition d'origine. [cite_start]Le disque final de 30Go n'aura que 25Go d'utilisé, l'espace supplémentaire est perdu[cite: 93].
+4.  **Problème 2 - Conflit d'UUID :** `dd` crée un clone parfait. [cite_start]Les deux disques ont maintenant **exactement les mêmes UUID**[cite: 124]. [cite_start]Si vous redémarrez, le système ne saura pas lequel est le "vrai" disque racine, provoquant un échec de démarrage[cite: 125].
+
+**Solutions :**
+* **Pour l'espace perdu :**
+    1.  [cite_start]`fdisk <DiskFinal>` : Supprimer la partition système[cite: 111].
+    2.  [cite_start]`fdisk <DiskFinal>` : Recréer la partition avec le **même secteur de début** [cite: 114][cite_start], mais laisser le secteur de fin par défaut (la fin du disque)[cite: 115].
+    3.  [cite_start]`resize2fs <DiskFinal/PartMax>` : Commande magique qui **agrandit le système de fichiers (ext4)** pour qu'il remplisse la partition devenue plus grande[cite: 119].
+* **Pour le conflit d'UUID :**
+    1.  [cite_start]Effacer la table de partition du *vieux disque* (`DiskInitial`) avec `dd` pour le rendre invisible au démarrage[cite: 131].
+    2.  `reboot`. [cite_start]Le système démarre sur le nouveau disque[cite: 134].
+
+---
+
+## 📦 3. Méthode 2 : Remplacement par Copie de Fichiers (`cp`)
+
+[cite_start]**Objectif :** Migrer le système vers un autre disque (fonctionne même si le disque final est plus petit, tant que les *données* rentrent)[cite: 149, 151].
+
+**Processus :**
+1.  [cite_start]**Mode "Live" :** Toujours obligatoire[cite: 152].
+2.  **Préparation `DiskFinal` :**
+    * [cite_start]Créer une structure de partition *identique* à l'originale (une partition EFI, une partition système) avec `fdisk`[cite: 168].
+    * [cite_start]Formater chaque partition[cite: 175]:
+        * [cite_start]Partition EFI : `mkfs.vfat` (FAT32)[cite: 179].
+        * [cite_start]Partition Système : `mkfs.ext4`[cite: 189].
+    * [cite_start]**Crucial :** Lors du formatage, utiliser les options (`-i` pour vfat, `-U` pour ext4) pour **forcer les mêmes UUID/ID** que sur le disque d'origine[cite: 186, 191]. Cela garantit que `/etc/fstab` fonctionnera sans modification.
+3.  **Copie des données :**
+    * [cite_start]Monter les deux disques (ex: `/mnt/initial` et `/mnt/final`)[cite: 200, 207].
+    * Utiliser `cp` avec les bonnes options. [cite_start]La question [cite: 198] vous guide vers des options comme `-a` (archive) ou `-rP` (récursif + préserve les permissions/propriétaires/dates).
+    * [cite_start]**Optimisation :** Exclure les fichiers inutiles comme `swap.img`[cite: 211, 213].
+4.  [cite_start]**Finalisation :** Comme pour la méthode 1, effacer l'ancien disque [cite: 221] [cite_start]et redémarrer[cite: 223].
+
+**Comparaison :**
+* `dd` (Clonage) : Rapide, simple, mais copie l'espace vide et nécessite un disque de destination de taille >=.
+* `cp` (Copie) : Plus lent, plus complexe, mais plus flexible. Permet de changer la taille des partitions et ne copie que les données utiles.
+
+---
+
+## 📁 4. Interopérabilité (FAT32 / NTFS)
+
+**Objectif :** Comprendre pourquoi le partage de fichiers avec Windows/macOS (via FAT32) pose problème.
+
+* [cite_start]**Le problème `vfat` (FAT32) :** Ce système de fichiers ne gère pas les permissions Linux (propriétaire, groupe, etc.)[cite: 242].
+* [cite_start]**Solution `mount` :** On utilise les options `uid=1000, gid=1000` lors du montage[cite: 236]. Cela *simule* les permissions : tous les fichiers sur la clé USB *semblent* appartenir à votre utilisateur (ID 1000), vous donnant le droit de les lire/écrire.
+* [cite_start]**Le problème de copie :** Vous avez eu des erreurs en copiant des fichiers vers `vfat` ou `ntfs`[cite: 263].
+* **Cause :** Ces SGF interdisent certains caractères dans les noms de fichiers (ex: `:`, `*`, `?`, `|`) qui sont valides sous Linux (ext4).
+* [cite_start]**Solution de transport :** Pour déplacer des fichiers "non compatibles" sur une clé USB, il faut les mettre dans une "boîte" : créez une **archive** (ex: `tar.gz`)[cite: 265, 248].
