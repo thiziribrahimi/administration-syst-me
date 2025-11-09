@@ -12,7 +12,7 @@ Ce qu'il faut retenir :
 * **Service :** Un terme (principalement `systemd`) pour gérer un démon ou une tâche. Le service *contrôle* le processus du démon.
 
 ---
-
+Un service = un programme qui tourne en arrière-plan et que systemd gère pour toi.
 ## ⚙️ 2. `systemd` : Le Cœur de la Gestion
 
 [cite_start]`systemd` est le **premier processus** démarré par le noyau Linux (son PID est 1)[cite: 28]. [cite_start]Son rôle principal est d'initialiser le reste du système et de **gérer les services**[cite: 8].
