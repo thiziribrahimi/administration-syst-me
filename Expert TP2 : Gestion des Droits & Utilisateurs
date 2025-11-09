@@ -1,0 +1,79 @@
+# Résumé Expert TP2 : Gestion des Droits & Utilisateurs
+
+Ce résumé se concentre sur les concepts de gestion des utilisateurs, des groupes, des privilèges et des droits sur les fichiers, en vue de votre QCM.
+
+---
+
+## 👥 1. Gestion des Utilisateurs et Groupes
+
+* **Création d'utilisateur :**
+    * [cite_start]`adduser` : Outil convivial et interactif qui crée l'utilisateur, son répertoire personnel (`/home/login`), et demande un mot de passe[cite: 474].
+    * [cite_start]`useradd` : Outil de bas niveau, non interactif (souvent utilisé dans les scripts)[cite: 474].
+* **Commandes de groupes :**
+    * [cite_start]`addgroup` (ou `groupadd`) : Crée un nouveau groupe[cite: 486].
+    * `usermod -aG <groupe> <utilisateur>` : Ajoute un utilisateur à un groupe. L'option `-a` (append) est cruciale pour ne pas écraser les groupes existants.
+    * [cite_start]`groups <utilisateur>` : Liste les groupes auxquels un utilisateur appartient[cite: 488].
+
+---
+
+## 🛡️ 2. Élévation de Privilèges (`su` vs `sudo`)
+
+C'est un concept fondamental de sécurité sous Linux.
+
+### `su` (Switch User)
+
+* [cite_start]`su toto` : Vous **devenez** l'utilisateur `toto`, mais vous conservez votre environnement de travail (votre `PATH`, votre `HOME`, etc.)[cite: 508, 510, 519]. [cite_start]C'est ce qui a causé l'exécution de votre script `ls` malveillant[cite: 516].
+* `su - toto` (ou `su -l toto`) : Simule une **connexion complète** (login) de `toto`. [cite_start]Vous récupérez son environnement, son `PATH`, et vous atterrissez dans son `HOME`[cite: 520]. C'est la méthode la plus propre pour changer d'utilisateur.
+
+### `sudo` (SuperUser Do)
+
+* [cite_start]**Principe :** Exécute une *seule* commande en tant que `root` (ou un autre utilisateur) sans ouvrir une session complète[cite: 532, 538].
+* **Pourquoi `sudo` est mieux que `su root` ?**
+    1.  [cite_start]**Traçabilité :** *Chaque* commande `sudo` est journalisée dans `/var/log/auth.log` avec le nom de l'utilisateur qui l'a lancée[cite: 534, 535, 539]. Si vous êtes en session `root`, on sait juste que `root` l'a fait, mais pas *qui* était `root`.
+    2.  **Sécurité :** Vous n'avez pas besoin de partager le mot de passe `root`. [cite_start]Vous pouvez (et devriez) même désactiver le compte `root` (ex: `sudo usermod -p '!' root`)[cite: 540].
+    3.  **Permissions granulaires :** Vous pouvez donner des droits limités.
+
+### `/etc/sudoers`
+
+* **Fichier de configuration** qui définit *qui* peut faire *quoi* avec `sudo`.
+* [cite_start]**Commande d'édition :** TOUJOURS utiliser `visudo`[cite: 544]. Cette commande vérifie la syntaxe avant d'enregistrer. Une erreur dans ce fichier peut vous bloquer hors de votre système.
+* **Donner des droits :**
+    * [cite_start]**Droits totaux :** Pour donner les droits `sudo` à `tux`, il faut l'ajouter au groupe `sudo` (ou `admin` selon la distribution)[cite: 525].
+    * [cite_start]**Droits partiels :** Vous avez donné à `toto` le droit d'exécuter *uniquement* la commande `cat`[cite: 547]. La ligne dans `sudoers` ressemble à : `toto ALL=(ALL) /bin/cat`.
+
+---
+
+## 🗂️ 3. Droits et Attributs de Fichiers
+
+### Droits d'endossement (SetUID / SUID)
+
+* [cite_start]**Commande :** `chmod u+s <fichier>` (le 's' remplace le 'x' pour le propriétaire)[cite: 559].
+* **Principe :** Quand un exécutable a le SUID, il se lance non pas avec les droits de l'utilisateur qui le lance, mais avec les droits du **propriétaire** du fichier (souvent `root`).
+* [cite_start]**Danger :** Vous l'avez appliqué à `/bin/cat`[cite: 559]. [cite_start]N'importe quel utilisateur pouvait alors faire `cat /etc/shadow`[cite: 560], car `cat` s'exécutait en tant que `root` (qui a le droit de lire ce fichier). [cite_start]C'est une **faille de sécurité majeure**[cite: 561].
+
+### Attributs de Fichiers (`chattr`/`lsattr`)
+
+* **Principe :** Des permissions "cachées" qui vont au-delà du `rwx`.
+* [cite_start]**Commandes :** `chattr` (pour changer) et `lsattr` (pour lister)[cite: 563].
+* **Attribut `a` (Append-only) :**
+    * [cite_start]Vous l'avez activé : `chattr +a test_attr.txt`[cite: 566].
+    * **Effet :**
+        * [cite_start]Vous **pouvez** ajouter du contenu à la fin (ex: `echo "..." >> fichier`)[cite: 570].
+        * [cite_start]Vous **ne pouvez PAS** supprimer le fichier[cite: 572].
+        * [cite_start]Vous **ne pouvez PAS** l'écraser (ex: `echo "..." > fichier`)[cite: 571].
+        * Même `root` ne peut pas supprimer ou modifier le fichier sans d'abord retirer l'attribut (`chattr -a`).
+
+---
+
+## 🌍 4. Environnement et Variables
+
+* **Variables Clés :**
+    * [cite_start]`PATH` : Liste des répertoires où le shell cherche les commandes[cite: 582]. [cite_start]Vous l'avez modifié pour inclure `.` (répertoire courant), ce qui est une **mauvaise pratique de sécurité** (cf. votre test avec le script `ls`)[cite: 495, 516].
+    * [cite_start]`HOME` : Le répertoire personnel de l'utilisateur[cite: 582].
+    * [cite_start]`PS1` (Bonus) : Définit l'apparence de votre prompt (invite de commande)[cite: 606].
+* **Modification :**
+    * [cite_start]**Temporaire :** `export MA_VAR=valeur` (valable pour la session shell active)[cite: 579].
+    * [cite_start]**Permanente :** Ajouter la ligne `export ...` dans `~/.profile` (pour les sessions login) ou `~/.bashrc` (pour les shells interactifs)[cite: 580].
+* **Historique :**
+    * [cite_start]`history` : Affiche les commandes précédentes[cite: 584].
+    * [cite_start]`HISTFILE` / `HISTSIZE` : Variables qui contrôlent le comportement de l'historique (vous avez modifié l'une d'elles pour le désactiver)[cite: 587].
